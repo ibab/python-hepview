@@ -1,12 +1,24 @@
 
-from hepmc import *
-import pydot
+import sys
 import os
 import re
-from sys import argv
 
 import networkx as nx
 import matplotlib.pyplot as plt
+from networkx.algorithms.traversal.depth_first_search import dfs_edges
+
+from hepmc import *
+
+def iterate_events(fpath):
+    for evt in event_iterator(fpath):
+        yield(to_graph(evt))
+
+def event_iterator(fpath):
+    reader = IO_GenEvent(fpath, 'r')
+    evt = reader.get_next_event()
+    while evt:
+        yield evt
+        evt = reader.get_next_event()
 
 def to_graph(evt):
     G = nx.DiGraph()
@@ -28,11 +40,19 @@ def to_graph(evt):
         else:
             s = start.barcode()
             e = end.barcode()
-        G.add_edge(s, e, barcode=p.barcode(), status=p.status(), pdg=p.pdg_id(), object=p)
+        G.add_edge(s, e, barcode=p.barcode(),
+                         status=p.status(),
+                         pdg=p.pdg_id(),
+                         obj=p)
+    # color signal particles
+    for p1 in G.edges(data=True):
+        par = p1[1]
+        pid = p1[2]['obj'].pdg_id()
+        if pid in {-5, 5}:
+            for p2 in dfs_edges(G, par):
+                G[p2[0]][p2[1]]['signal'] = True
     return G
 
 if __name__ == '__main__':
-    reader = IO_GenEvent(argv[1], 'r')
-    evt = reader.get_next_event()
-    G = to_graph(evt)
-    from IPython import embed; embed()
+    for evt in iterate_events(sys.argv[1]):
+        from IPython import embed; embed()
